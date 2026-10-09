@@ -1,69 +1,115 @@
 import javax.swing.*;
 import java.awt.*;
 
-public class MainFrame extends JFrame implements Observer {
-    private final ColorModel model = new ColorModel();
+public class MainFrame extends JFrame {
 
-    private final View rgbPanel;
-    private final View cmykPanel;
-    private final View hslPanel;
-    private final JPanel previewPanel = new JPanel();
+    private double currentR = 1.0;
+    private double currentG = 0.0;
+    private double currentB = 0.0;
+
+    private boolean isUpdating = false;
+
+    private final JPanel previewPanel;
+    private final JButton btnPalette;
+
+    private final ColorModelPanel cmykPanel;
+    private final ColorModelPanel rgbPanel;
+    private final ColorModelPanel hlsPanel;
 
     public MainFrame() {
         setTitle("Лаб1");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new BorderLayout(10, 10));
+        setSize(950, 480);
+        setLocationRelativeTo(null);
+        setLayout(new BorderLayout());
 
-        // инициализация панелей
-        rgbPanel = new View("RGB", new String[]{"R:", "G:", "B:"}, new int[]{255, 255, 255},
-                v -> model.setRgb((int) v[0], (int) v[1], (int) v[2]));
+        JPanel centerPanel = new JPanel(new GridLayout(2, 2));
 
-        cmykPanel = new View("CMYK", new String[]{"C (%):", "M (%):", "Y (%):", "K (%):"}, new int[]{100, 100, 100, 100},
-                v -> model.setCmyk(v[0], v[1], v[2], v[3]));
+        cmykPanel = new ColorModelPanel(new String[]{"C (%):", "M (%):", "Y (%):", "K (%):"},
+                new int[]{100, 100, 100, 100});
 
-        hslPanel = new View("HSL", new String[]{"H (°):", "S (%):", "L (%):"}, new int[]{360, 100, 100},
-                v -> model.setHsl(v[0], v[1], v[2]));
+        rgbPanel = new ColorModelPanel(new String[]{"R:", "G:", "B:"},
+                new int[]{255, 255, 255});
 
-        // кнопка выбора цвета из палитры
-        JButton colorPickerBtn = new JButton("Выбрать из палитры...");
-        colorPickerBtn.addActionListener(e -> {
-            Color c = JColorChooser.showDialog(this, "Выбор цвета",
-                    new Color(model.getR(), model.getG(), model.getB()));
-            if (c != null) model.setRgb(c.getRed(), c.getGreen(), c.getBlue());
-        });
+        hlsPanel = new ColorModelPanel(new String[]{"H (°):", "L (%):", "S (%):"},
+                new int[]{360, 100, 100});
 
-        // панель для цвета
-        previewPanel.setPreferredSize(new Dimension(150, 60));
+        btnPalette = new JButton("Выбрать из палитры...");
 
-        JPanel gridPanel = new JPanel(new GridLayout(2, 2));
-        gridPanel.add(rgbPanel);
-        gridPanel.add(cmykPanel);
-        gridPanel.add(hslPanel);
-        gridPanel.add(colorPickerBtn);
+        centerPanel.add(cmykPanel);
+        centerPanel.add(rgbPanel);
+        centerPanel.add(hlsPanel);
+        centerPanel.add(btnPalette);
 
-        add(gridPanel, BorderLayout.CENTER);
+        add(centerPanel, BorderLayout.CENTER);
+        previewPanel = new JPanel();
+        previewPanel.setPreferredSize(new Dimension(0, 50));
+        //previewPanel.setOpaque(true);
         add(previewPanel, BorderLayout.SOUTH);
 
-        // окно-подписчик модели
-        model.subscribe(this);
-        model.setRgb(255, 0, 0);
+        setupEvents();
 
-        pack();
-        setLocationRelativeTo(null);
+        updateFromRgb(1.0, 0.0, 0.0, null);
     }
 
-    // изменение всех значений при изменении одного из
-    @Override
-    public void update() {
-        int r = model.getR(), g = model.getG(), b = model.getB();
+    private void setupEvents() {
+        btnPalette.addActionListener(e -> {
+            Color initial = new Color((float) currentR, (float) currentG, (float) currentB);
+            Color chosen = JColorChooser.showDialog(this, "Выберите цвет из палитры", initial);
+            if (chosen != null) {
+                updateFromRgb(chosen.getRed() / 255.0,
+                        chosen.getGreen() / 255.0,
+                        chosen.getBlue() / 255.0, null);
+            }
+        });
 
-        previewPanel.setBackground(new Color(r, g, b));
-        rgbPanel.setValues(new double[]{r, g, b});
-        cmykPanel.setValues(ColorConverter.rgbToCmyk(r, g, b));
-        hslPanel.setValues(ColorConverter.rgbToHsl(r, g, b));
+        ColorModelPanel.ColorChangeListener changeListener = source -> {
+            if (isUpdating) return;
+
+            if (source == cmykPanel) {
+                double[] vals = cmykPanel.getValues();
+                double[] rgb = ColorUtils.cmykToRgb(
+                        vals[0] / 100.0, vals[1] / 100.0, vals[2] / 100.0, vals[3] / 100.0);
+                updateFromRgb(rgb[0], rgb[1], rgb[2], source);
+            } else if (source == rgbPanel) {
+                double[] vals = rgbPanel.getValues();
+                updateFromRgb(vals[0] / 255.0, vals[1] / 255.0, vals[2] / 255.0, source);
+            } else if (source == hlsPanel) {
+                double[] vals = hlsPanel.getValues();
+                double[] rgb = ColorUtils.hlsToRgb(vals[0], vals[1] / 100.0, vals[2] / 100.0);
+                updateFromRgb(rgb[0], rgb[1], rgb[2], source);
+            }
+        };
+
+        cmykPanel.setColorChangeListener(changeListener);
+        rgbPanel.setColorChangeListener(changeListener);
+        hlsPanel.setColorChangeListener(changeListener);
     }
 
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new MainFrame().setVisible(true));
+    private void updateFromRgb(double r, double g, double b, ColorModelPanel source) {
+        this.currentR = Math.min(1.0, Math.max(0.0, r));
+        this.currentG = Math.min(1.0, Math.max(0.0, g));
+        this.currentB = Math.min(1.0, Math.max(0.0, b));
+
+        previewPanel.setBackground(new Color((float) currentR, (float) currentG, (float) currentB));
+
+        isUpdating = true;
+
+        if (source != cmykPanel) {
+            double[] cmyk = ColorUtils.rgbToCmyk(currentR, currentG, currentB);
+            cmykPanel.setValues(new double[]{
+                    cmyk[0] * 100.0, cmyk[1] * 100.0, cmyk[2] * 100.0, cmyk[3] * 100.0});
+        }
+        if (source != rgbPanel) {
+            rgbPanel.setValues(new double[]{
+                    currentR * 255.0, currentG * 255.0, currentB * 255.0});
+        }
+        if (source != hlsPanel) {
+            double[] hls = ColorUtils.rgbToHls(currentR, currentG, currentB);
+            hlsPanel.setValues(new double[]{
+                    hls[0], hls[1] * 100.0, hls[2] * 100.0});
+        }
+
+        isUpdating = false;
     }
 }
