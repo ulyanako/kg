@@ -1,8 +1,0 @@
-<component name="ArtifactManager">
-  <artifact type="jar" name="ColorModels:jar">
-    <output-path>$PROJECT_DIR$/out/artifacts/ColorModels_jar</output-path>
-    <root id="archive" name="ColorModels.jar">
-      <element id="module-output" name="ColorModels" />
-    </root>
-  </artifact>
-</component>

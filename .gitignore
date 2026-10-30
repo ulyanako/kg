@@ -1,0 +1,7 @@
+**/MyJavaApp/
+**/out/
+**/target/
+**/build/
+.idea/
+*.iml
+*.log
